@@ -1,0 +1,6 @@
+{
+  "name": "AquaZen 3D",
+  "description": "Interactive 3D aquarium sanctuary with fluid simulation, breeding mechanics, tank customization, daily challenges, and cloud sync.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
