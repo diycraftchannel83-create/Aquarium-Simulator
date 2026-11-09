@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Generate transparent, looping fish GIFs that visually correspond to models/fish/*.glb.
+Version: 1.0.1.
 The GLBs are static meshes, so this produces lightweight 2D swim cycles for the current
 Canvas/Coil renderer. Run with Pillow installed.
 """
