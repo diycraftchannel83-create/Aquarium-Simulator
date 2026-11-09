@@ -59,82 +59,93 @@ class AquariumViewModel(application: Application) : AndroidViewModel(application
      */
     private fun startSimulationPhysicsLoop() {
         viewModelScope.launch(Dispatchers.Default) {
+            var lastPersistAt = System.currentTimeMillis()
             while (isActive) {
                 delay(33) // ~30 fps physics update
-                val currentState = repository.gameState.value
-                val isGrowthBoosted = System.currentTimeMillis() < currentState.speedGrowthActiveUntil
-                val growthRate = if (isGrowthBoosted) 0.0004f else 0.0001f
+                val now = System.currentTimeMillis()
 
-                val updatedFish = currentState.fishList.map { fish ->
-                    var px = fish.posX
-                    var py = fish.posY
-                    var pz = fish.posZ
-                    var vx = fish.velX
-                    var vy = fish.velY
-                    var vz = fish.velZ
+                // Calculate from the latest state while the repository lock is held.
+                // This prevents a stale physics snapshot from overwriting a fish purchase,
+                // feeding action, or another player action that happened during the tick.
+                repository.updateState(
+                    transform = { state ->
+                        val isGrowthBoosted = now < state.speedGrowthActiveUntil
+                        val growthRate = if (isGrowthBoosted) 0.0004f else 0.0001f
 
-                    // Flocking & wandering towards random targets
-                    val distToTarget = hypot(fish.targetX - px, fish.targetY - py)
-                    if (distToTarget < 0.05f || Math.random() < 0.015) {
-                        fish.targetX = (0.15f + Math.random() * 0.7f).toFloat()
-                        fish.targetY = (0.2f + Math.random() * 0.6f).toFloat()
-                        fish.targetZ = (0.2f + Math.random() * 0.6f).toFloat()
-                    }
+                        val updatedFish = state.fishList.map { fish ->
+                            var px = fish.posX
+                            var py = fish.posY
+                            var pz = fish.posZ
+                            var vx = fish.velX
+                            var vy = fish.velY
+                            var vz = fish.velZ
+                            var targetX = fish.targetX
+                            var targetY = fish.targetY
+                            var targetZ = fish.targetZ
 
-                    // Steer gently towards target
-                    val steerX = (fish.targetX - px) * 0.0005f
-                    val steerY = (fish.targetY - py) * 0.0004f
-                    val steerZ = (fish.targetZ - pz) * 0.0004f
+                            // Choose a new wandering target without mutating the old state object.
+                            val distToTarget = hypot(targetX - px, targetY - py)
+                            if (distToTarget < 0.05f || Math.random() < 0.015) {
+                                targetX = (0.15f + Math.random() * 0.7f).toFloat()
+                                targetY = (0.2f + Math.random() * 0.6f).toFloat()
+                                targetZ = (0.2f + Math.random() * 0.6f).toFloat()
+                            }
 
-                    vx = (vx + steerX).coerceIn(-0.004f, 0.004f)
-                    vy = (vy + steerY).coerceIn(-0.003f, 0.003f)
-                    vz = (vz + steerZ).coerceIn(-0.003f, 0.003f)
+                            val steerX = (targetX - px) * 0.0005f
+                            val steerY = (targetY - py) * 0.0004f
+                            val steerZ = (targetZ - pz) * 0.0004f
 
-                    px = (px + vx).coerceIn(0.08f, 0.92f)
-                    py = (py + vy).coerceIn(0.12f, 0.85f)
-                    pz = (pz + vz).coerceIn(0.1f, 0.9f)
+                            vx = (vx + steerX).coerceIn(-0.004f, 0.004f)
+                            vy = (vy + steerY).coerceIn(-0.003f, 0.003f)
+                            vz = (vz + steerZ).coerceIn(-0.003f, 0.003f)
 
-                    // Bounce if near boundaries
-                    if (px <= 0.08f || px >= 0.92f) vx = -vx
-                    if (py <= 0.12f || py >= 0.85f) vy = -vy
+                            px = (px + vx).coerceIn(0.08f, 0.92f)
+                            py = (py + vy).coerceIn(0.12f, 0.85f)
+                            pz = (pz + vz).coerceIn(0.1f, 0.9f)
 
-                    val newGrowth = (fish.growthStage + growthRate).coerceAtMost(1.0f)
-                    val newHunger = (fish.hungerPercent - 0.00005f).coerceAtLeast(0.1f)
+                            if (px <= 0.08f || px >= 0.92f) vx = -vx
+                            if (py <= 0.12f || py >= 0.85f) vy = -vy
 
-                    // Pregnancy incubation progress
-                    var pregProgress = fish.pregnancyProgress
-                    var isStillPregnant = fish.isPregnant
-                    if (fish.isPregnant) {
-                        pregProgress += if (isGrowthBoosted) 0.003f else 0.0008f
-                        if (pregProgress >= 1.0f) {
-                            // Birth ready!
-                            isStillPregnant = false
-                            pregProgress = 0.0f
+                            var pregnancyProgress = fish.pregnancyProgress
+                            var isPregnant = fish.isPregnant
+                            if (isPregnant) {
+                                pregnancyProgress += if (isGrowthBoosted) 0.003f else 0.0008f
+                                if (pregnancyProgress >= 1.0f) {
+                                    isPregnant = false
+                                    pregnancyProgress = 0f
+                                }
+                            }
+
+                            fish.copy(
+                                posX = px,
+                                posY = py,
+                                posZ = pz,
+                                velX = vx,
+                                velY = vy,
+                                velZ = vz,
+                                targetX = targetX,
+                                targetY = targetY,
+                                targetZ = targetZ,
+                                growthStage = (fish.growthStage + growthRate).coerceAtMost(1.0f),
+                                hungerPercent = (fish.hungerPercent - 0.00005f).coerceAtLeast(0.1f),
+                                pregnancyProgress = pregnancyProgress,
+                                isPregnant = isPregnant
+                            )
                         }
-                    }
 
-                    fish.copy(
-                        posX = px,
-                        posY = py,
-                        posZ = pz,
-                        velX = vx,
-                        velY = vy,
-                        velZ = vz,
-                        growthStage = newGrowth,
-                        hungerPercent = newHunger,
-                        pregnancyProgress = pregProgress,
-                        isPregnant = isStillPregnant
-                    )
-                }
+                        val newCleanliness =
+                            (state.tank.waterCleanliness - 0.00001f).coerceAtLeast(0.3f)
+                        state.copy(
+                            fishList = updatedFish,
+                            tank = state.tank.copy(waterCleanliness = newCleanliness)
+                        )
+                    },
+                    persist = false
+                )
 
-                // Check water cleanliness decay
-                val newCleanliness = (currentState.tank.waterCleanliness - 0.00001f).coerceAtLeast(0.3f)
-
-                repository.updateState { state ->
-                    state.copy(
-                        fishList = updatedFish,
-                        tank = state.tank.copy(waterCleanliness = newCleanliness)
-                    )
+                if (now - lastPersistAt >= 5_000L) {
+                    repository.persistCurrentState()
+                    lastPersistAt = now
                 }
             }
         }
@@ -157,24 +168,42 @@ class AquariumViewModel(application: Application) : AndroidViewModel(application
 
     // --- User Actions ---
 
+    /**
+     * Feed the fish nearest to the normalized tap position. A tap far from every
+     * fish only drops food visually and does not grant progress or experience.
+     */
     fun feedFishAt(x: Float, y: Float) {
         repository.updateState { state ->
+            val targetFish = state.fishList.minByOrNull { fish ->
+                hypot(fish.posX - x, fish.posY - y)
+            } ?: return@updateState state
+
+            val distance = hypot(targetFish.posX - x, targetFish.posY - y)
+            if (distance > 0.22f) return@updateState state
+
             val updatedFish = state.fishList.map { fish ->
-                val fedHunger = (fish.hungerPercent + 0.25f).coerceAtMost(1.0f)
-                val happy = (fish.happinessPercent + 0.15f).coerceAtMost(1.0f)
-                fish.copy(hungerPercent = fedHunger, happinessPercent = happy)
+                if (fish.id == targetFish.id) {
+                    fish.copy(
+                        hungerPercent = (fish.hungerPercent + 0.25f).coerceAtMost(1.0f),
+                        happinessPercent = (fish.happinessPercent + 0.15f).coerceAtMost(1.0f)
+                    )
+                } else {
+                    fish
+                }
             }
-            // Advance feeding daily challenge
-            val updatedChallenges = state.dailyChallenges.map { ch ->
-                if (ch.id == "ch_1" && ch.currentCount < ch.targetCount) {
-                    ch.copy(currentCount = ch.currentCount + 1)
-                } else ch
+            val updatedChallenges = state.dailyChallenges.map { challenge ->
+                if (challenge.id == "ch_1" && challenge.currentCount < challenge.targetCount) {
+                    challenge.copy(currentCount = challenge.currentCount + 1)
+                } else {
+                    challenge
+                }
             }
+            val nextExp = state.playerExp + 5
             state.copy(
                 fishList = updatedFish,
                 dailyChallenges = updatedChallenges,
-                playerExp = (state.playerExp + 5).let { if (it >= state.maxExp) it - state.maxExp else it },
-                playerLevel = if (state.playerExp + 5 >= state.maxExp) state.playerLevel + 1 else state.playerLevel
+                playerExp = if (nextExp >= state.maxExp) nextExp - state.maxExp else nextExp,
+                playerLevel = if (nextExp >= state.maxExp) state.playerLevel + 1 else state.playerLevel
             )
         }
     }
@@ -405,7 +434,8 @@ class AquariumViewModel(application: Application) : AndroidViewModel(application
     }
 
     override fun onCleared() {
-        super.onCleared()
+        repository.persistCurrentState()
         ambientSynthesizer.stopAmbientTrack()
+        super.onCleared()
     }
 }

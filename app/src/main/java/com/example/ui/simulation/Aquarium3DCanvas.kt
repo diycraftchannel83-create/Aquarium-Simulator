@@ -156,7 +156,12 @@ fun Aquarium3DCanvas(
                     ripples.add(WaterRipple(offset.x, offset.y))
                     // Add food pellet at tapped location
                     foodPellets.add(FoodPellet(x = offset.x, y = offset.y))
-                    onFeedAt(offset.x, offset.y)
+                    if (size.width > 0 && size.height > 0) {
+                        onFeedAt(
+                            (offset.x / size.width.toFloat()).coerceIn(0f, 1f),
+                            (offset.y / size.height.toFloat()).coerceIn(0f, 1f)
+                        )
+                    }
                 }
             }
             .pointerInput(Unit) {
