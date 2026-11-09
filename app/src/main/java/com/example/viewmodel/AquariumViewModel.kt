@@ -133,12 +133,15 @@ class AquariumViewModel(application: Application) : AndroidViewModel(application
 
                 // Keep the render state responsive without serializing the full save
                 // file on every 33 ms simulation tick.
-                repository.updateState(persist = false) { state ->
-                    state.copy(
-                        fishList = updatedFish,
-                        tank = state.tank.copy(waterCleanliness = newCleanliness)
-                    )
-                }
+                repository.updateState(
+                    transform = { state ->
+                        state.copy(
+                            fishList = updatedFish,
+                            tank = state.tank.copy(waterCleanliness = newCleanliness)
+                        )
+                    },
+                    persist = false
+                )
 
                 val now = System.currentTimeMillis()
                 if (now - lastPersistAt >= 5_000L) {
