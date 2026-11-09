@@ -24,7 +24,8 @@ data class FishSpecies(
     val pearlPrice: Int = 0,
     val description: String,
     val glowBioluminescent: Boolean = false,
-    val finStyle: FinStyle = FinStyle.FLOWING
+    val finStyle: FinStyle = FinStyle.FLOWING,
+    val assetPath: String? = null
 )
 
 enum class FinStyle {
@@ -70,7 +71,8 @@ data class DecorItem(
     val isPremium: Boolean = false,
     val description: String,
     val iconEmoji: String,
-    val colorHex: Long
+    val colorHex: Long,
+    val assetPath: String? = null
 )
 
 data class PlacedDecor(

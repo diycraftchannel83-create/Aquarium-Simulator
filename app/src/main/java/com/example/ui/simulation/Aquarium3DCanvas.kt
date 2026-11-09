@@ -4,7 +4,9 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -14,11 +16,25 @@ import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
+import coil.size.Size as CoilSize
 import com.example.data.AquariumCatalog
 import com.example.model.FinStyle
 import com.example.model.FishInstance
 import com.example.model.PlacedDecor
 import com.example.model.TankEnvironment
+import com.example.util.LiveAssetHelper
 import kotlin.math.*
 
 data class WaterRipple(
@@ -129,7 +145,10 @@ fun Aquarium3DCanvas(
         }
     }
 
-    Box(
+    val context = LocalContext.current
+    val imageLoader = remember { LiveAssetHelper.getImageLoader(context) }
+
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .pointerInput(Unit) {
@@ -138,9 +157,6 @@ fun Aquarium3DCanvas(
                     // Add food pellet at tapped location
                     foodPellets.add(FoodPellet(x = offset.x, y = offset.y))
                     onFeedAt(offset.x, offset.y)
-
-                    // Check if tapped near any fish
-                    // Will emit fish tap if within proximity
                 }
             }
             .pointerInput(Unit) {
@@ -152,6 +168,30 @@ fun Aquarium3DCanvas(
                 }
             }
     ) {
+        val totalWidthPx = constraints.maxWidth.toFloat()
+        val totalHeightPx = constraints.maxHeight.toFloat()
+
+        // Filter fish into procedural rendered vs asset-based GIF animated
+        val proceduralFish = fishList.filter { fish ->
+            val species = AquariumCatalog.getSpecies(fish.speciesId)
+            species.assetPath == null || !LiveAssetHelper.assetExists(context, species.assetPath)
+        }
+        val liveGifFish = fishList.filter { fish ->
+            val species = AquariumCatalog.getSpecies(fish.speciesId)
+            species.assetPath != null && LiveAssetHelper.assetExists(context, species.assetPath)
+        }
+
+        // Filter decor into procedural vs GIF
+        val proceduralDecor = placedDecorList.filter { placed ->
+            val decor = AquariumCatalog.getDecor(placed.decorId)
+            decor?.assetPath == null || !LiveAssetHelper.assetExists(context, decor.assetPath)
+        }
+        val liveGifDecor = placedDecorList.filter { placed ->
+            val decor = AquariumCatalog.getDecor(placed.decorId)
+            decor?.assetPath != null && LiveAssetHelper.assetExists(context, decor.assetPath)
+        }
+
+        // 1. Base 3D Canvas (Renders water caustics, bubbles, substrate, procedural fish and particles)
         Canvas(modifier = Modifier.fillMaxSize()) {
             val width = size.width
             val height = size.height
@@ -165,8 +205,8 @@ fun Aquarium3DCanvas(
             // 3. Render Substrate & Aquascaped Seabed
             drawSubstrate(width, height, tank.substrateType, isNightMode)
 
-            // 4. Render Background Placed Decor (sorted by depth)
-            for (decor in placedDecorList) {
+            // 4. Render Procedural Background Placed Decor
+            for (decor in proceduralDecor) {
                 drawDecorItem(decor, width, height, time)
             }
 
@@ -186,10 +226,9 @@ fun Aquarium3DCanvas(
                 )
             }
 
-            // 7. Render 3D Fish with Organic Tail Physics & Depth Sorting
-            // Sort fish by posZ so farther fish are rendered behind closer fish
-            val sortedFish = fishList.sortedBy { it.posZ }
-            for (fish in sortedFish) {
+            // 7. Render 3D Fish with Organic Tail Physics (those without dedicated GIF asset)
+            val sortedProcedural = proceduralFish.sortedBy { it.posZ }
+            for (fish in sortedProcedural) {
                 drawRealisticFish3D(fish, width, height, time, isNightMode)
             }
 
@@ -203,10 +242,113 @@ fun Aquarium3DCanvas(
                 )
             }
 
-            // 9. Glass Refraction & Vignette Overlay (Gives true aquarium tank feel)
+            // 9. Glass Refraction & Vignette Overlay
             drawAquariumGlassEdge(width, height)
         }
+
+        // 2. Render Live Animated GIF Decor Items (e.g., swaying live anemone/coral)
+        for (placed in liveGifDecor) {
+            val decor = AquariumCatalog.getDecor(placed.decorId) ?: continue
+            LiveGifDecorItem(
+                decor = decor,
+                scale = placed.scale,
+                posX = placed.posX,
+                totalWidthPx = totalWidthPx,
+                totalHeightPx = totalHeightPx
+            )
+        }
+
+        // 3. Render Live Animated GIF Fishes (e.g. Clownfish swimming, Jellyfish pulsating)
+        for (fish in liveGifFish) {
+            val species = AquariumCatalog.getSpecies(fish.speciesId)
+            LiveGifFishItem(
+                fish = fish,
+                species = species,
+                totalWidthPx = totalWidthPx,
+                totalHeightPx = totalHeightPx,
+                onTap = { onTapFish(fish) }
+            )
+        }
     }
+}
+
+@Composable
+private fun LiveGifDecorItem(
+    decor: com.example.model.DecorItem,
+    scale: Float,
+    posX: Float,
+    totalWidthPx: Float,
+    totalHeightPx: Float
+) {
+    val context = LocalContext.current
+    val imageLoader = remember { LiveAssetHelper.getImageLoader(context) }
+    val assetUri = LiveAssetHelper.getAssetUri(decor.assetPath!!)
+    val decorWidthDp = (90 * scale).dp
+    val decorHeightDp = (90 * scale).dp
+    val xPx = (posX * totalWidthPx) - (45 * scale)
+    val yPx = (totalHeightPx * 0.84f) - (70 * scale)
+
+    val painter = rememberAsyncImagePainter(
+        model = ImageRequest.Builder(context)
+            .data(assetUri)
+            .size(CoilSize.ORIGINAL)
+            .build(),
+        imageLoader = imageLoader
+    )
+
+    Image(
+        painter = painter,
+        contentDescription = decor.name,
+        contentScale = ContentScale.Fit,
+        modifier = Modifier
+            .offset { IntOffset(xPx.toInt(), yPx.toInt()) }
+            .size(decorWidthDp, decorHeightDp)
+    )
+}
+
+@Composable
+private fun LiveGifFishItem(
+    fish: FishInstance,
+    species: com.example.model.FishSpecies,
+    totalWidthPx: Float,
+    totalHeightPx: Float,
+    onTap: () -> Unit
+) {
+    val context = LocalContext.current
+    val imageLoader = remember { LiveAssetHelper.getImageLoader(context) }
+    val assetUri = LiveAssetHelper.getAssetUri(species.assetPath!!)
+
+    val depthScale = 0.65f + (fish.posZ * 0.55f)
+    val finalScale = species.bodyScale * depthScale * (0.6f + fish.growthStage * 0.4f)
+    val baseSize = 85.dp * finalScale
+    val movingRight = fish.velX >= 0
+    val headingAngle = Math.toDegrees(atan2(fish.velY.toDouble(), abs(fish.velX).toDouble())).toFloat()
+
+    val xPx = (fish.posX * totalWidthPx) - 40 * finalScale
+    val yPx = (fish.posY * totalHeightPx) - 30 * finalScale
+
+    val painter = rememberAsyncImagePainter(
+        model = ImageRequest.Builder(context)
+            .data(assetUri)
+            .size(CoilSize.ORIGINAL)
+            .build(),
+        imageLoader = imageLoader
+    )
+
+    Image(
+        painter = painter,
+        contentDescription = fish.customName,
+        contentScale = ContentScale.Fit,
+        modifier = Modifier
+            .offset { IntOffset(xPx.toInt(), yPx.toInt()) }
+            .size(baseSize)
+            .graphicsLayer {
+                rotationZ = if (movingRight) headingAngle else -headingAngle
+                scaleX = if (movingRight) 1f else -1f // Flip horizontally when swimming left
+                alpha = (0.75f + (fish.posZ * 0.25f)).coerceIn(0.7f, 1f)
+            }
+            .clickable { onTap() }
+    )
 }
 
 private fun DrawScope.drawWaterBackground(

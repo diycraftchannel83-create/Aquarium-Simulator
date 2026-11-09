@@ -19,10 +19,18 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.remember
+import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
+import coil.size.Size as CoilSize
 import com.example.data.AquariumCatalog
 import com.example.data.GameState
 import com.example.model.FishRarity
 import com.example.model.FishSpecies
+import com.example.util.LiveAssetHelper
 import com.example.viewmodel.AquariumViewModel
 
 @Composable
@@ -106,15 +114,49 @@ fun SpeciesCatalogSheet(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
+                                val context = LocalContext.current
+                                val hasLiveGif = species.assetPath != null && LiveAssetHelper.assetExists(context, species.assetPath)
+
                                 Box(
                                     modifier = Modifier
-                                        .size(36.dp)
+                                        .size(44.dp)
                                         .clip(CircleShape)
-                                        .background(Color(species.primaryColorHex)),
+                                        .background(Color(species.primaryColorHex).copy(alpha = 0.25f)),
                                     contentAlignment = Alignment.Center
                                 ) {
+                                    if (hasLiveGif) {
+                                        val imageLoader = remember { LiveAssetHelper.getImageLoader(context) }
+                                        val painter = rememberAsyncImagePainter(
+                                            model = ImageRequest.Builder(context)
+                                                .data(LiveAssetHelper.getAssetUri(species.assetPath!!))
+                                                .size(CoilSize.ORIGINAL)
+                                                .build(),
+                                            imageLoader = imageLoader
+                                        )
+                                        Image(
+                                            painter = painter,
+                                            contentDescription = species.name,
+                                            modifier = Modifier.size(38.dp),
+                                            contentScale = ContentScale.Fit
+                                        )
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(32.dp)
+                                                .clip(CircleShape)
+                                                .background(Color(species.primaryColorHex))
+                                        )
+                                    }
+
                                     if (!isUnlocked) {
-                                        Icon(Icons.Default.Lock, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .background(Color.Black.copy(alpha = 0.45f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(Icons.Default.Lock, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                        }
                                     }
                                 }
 

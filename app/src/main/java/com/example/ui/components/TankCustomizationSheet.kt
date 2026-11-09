@@ -20,9 +20,17 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.Image
+import androidx.compose.runtime.remember
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
+import coil.size.Size as CoilSize
 import com.example.data.AquariumCatalog
 import com.example.data.GameState
 import com.example.model.DecorItem
+import com.example.util.LiveAssetHelper
 import com.example.viewmodel.AquariumViewModel
 
 @Composable
@@ -304,12 +312,31 @@ fun TankCustomizationSheet(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(text = decor.iconEmoji, fontSize = 24.sp)
+                                    val context = LocalContext.current
+                                    val hasLiveGif = decor.assetPath != null && LiveAssetHelper.assetExists(context, decor.assetPath)
+                                    if (hasLiveGif) {
+                                        val imageLoader = remember { LiveAssetHelper.getImageLoader(context) }
+                                        val painter = rememberAsyncImagePainter(
+                                            model = ImageRequest.Builder(context)
+                                                .data(LiveAssetHelper.getAssetUri(decor.assetPath!!))
+                                                .size(CoilSize.ORIGINAL)
+                                                .build(),
+                                            imageLoader = imageLoader
+                                        )
+                                        Image(
+                                            painter = painter,
+                                            contentDescription = decor.name,
+                                            modifier = Modifier.size(32.dp),
+                                            contentScale = ContentScale.Fit
+                                        )
+                                    } else {
+                                        Text(text = decor.iconEmoji, fontSize = 24.sp)
+                                    }
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Column {
                                         Text(text = decor.name, fontWeight = FontWeight.SemiBold)
                                         Text(
-                                            text = "+${(decor.happinessBonus * 100).toInt()}% Fish Happiness",
+                                            text = "+${(decor.happinessBonus * 100).toInt()}% Fish Happiness" + if (hasLiveGif) " • Live GIF" else "",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.secondary
                                         )

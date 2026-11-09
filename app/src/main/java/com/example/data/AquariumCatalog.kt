@@ -19,7 +19,8 @@ object AquariumCatalog {
             unlockLevel = 1,
             coinPrice = 80,
             description = "Iconic orange fish with crisp white stripes, loves hosting in gentle sea anemones.",
-            finStyle = FinStyle.FLOWING
+            finStyle = FinStyle.FLOWING,
+            assetPath = "aquarium/fish/clownfish.gif"
         ),
         FishSpecies(
             id = "blue_tang",
@@ -118,7 +119,8 @@ object AquariumCatalog {
             pearlPrice = 25,
             glowBioluminescent = true,
             description = "Translucent deep-water medusa pulsating with green fluorescent protein (GFP) luminescence.",
-            finStyle = FinStyle.JELLY
+            finStyle = FinStyle.JELLY,
+            assetPath = "aquarium/fish/crystal_jelly.gif"
         ),
         FishSpecies(
             id = "celestial_dragonet",
@@ -187,7 +189,8 @@ object AquariumCatalog {
             happinessBonus = 0.20f,
             description = "Pulsates with gentle electric pink aura; clownfish gain instant bliss.",
             iconEmoji = "🌸",
-            colorHex = 0xFFFF4081
+            colorHex = 0xFFFF4081,
+            assetPath = "aquarium/decor/neon_anemone.gif"
         ),
         DecorItem(
             id = "pearl_treasure_chest",
