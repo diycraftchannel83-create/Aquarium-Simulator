@@ -20,6 +20,7 @@ object AquariumCatalog {
             coinPrice = 80,
             description = "Iconic orange fish with crisp white stripes, loves hosting in gentle sea anemones.",
             finStyle = FinStyle.FLOWING,
+            assetPath = "aquarium/fish/clownfish.gif"
         ),
         FishSpecies(
             id = "blue_tang",
@@ -35,7 +36,25 @@ object AquariumCatalog {
             unlockLevel = 1,
             coinPrice = 120,
             description = "Vibrant electric blue surgeonfish with a bright yellow tail and gentle gliding motion.",
-            finStyle = FinStyle.FLOWING
+            finStyle = FinStyle.FLOWING,
+            assetPath = "aquarium/fish/blue_tang.gif"
+        ),
+        FishSpecies(
+            id = "neon_tetra",
+            name = "Neon Tetra",
+            scientificName = "Paracheirodon innesi",
+            rarity = FishRarity.COMMON,
+            diet = FishDiet.OMNIVORE,
+            primaryColorHex = 0xFF26B6C8,
+            secondaryColorHex = 0xFFFF4568,
+            finColorHex = 0xFF4DD0E1,
+            bodyScale = 0.68f,
+            baseSwimSpeed = 1.45f,
+            unlockLevel = 1,
+            coinPrice = 60,
+            description = "Small schooling fish with a brilliant electric-blue stripe and vivid red lower body.",
+            finStyle = FinStyle.FLOWING,
+            assetPath = "aquarium/fish/neon_tetra.gif"
         ),
         FishSpecies(
             id = "mandarin",
@@ -68,7 +87,8 @@ object AquariumCatalog {
             unlockLevel = 3,
             coinPrice = 380,
             description = "Fiery scarlet body accented with deep midnight vertical bars and shimmering sapphire fin tips.",
-            finStyle = FinStyle.ANGEL
+            finStyle = FinStyle.ANGEL,
+            assetPath = "aquarium/fish/angelfish.gif"
         ),
         FishSpecies(
             id = "discus_royal",
