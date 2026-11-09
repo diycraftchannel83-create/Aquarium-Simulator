@@ -20,7 +20,6 @@ object AquariumCatalog {
             coinPrice = 80,
             description = "Iconic orange fish with crisp white stripes, loves hosting in gentle sea anemones.",
             finStyle = FinStyle.FLOWING,
-            assetPath = "aquarium/fish/clownfish.gif"
         ),
         FishSpecies(
             id = "blue_tang",
