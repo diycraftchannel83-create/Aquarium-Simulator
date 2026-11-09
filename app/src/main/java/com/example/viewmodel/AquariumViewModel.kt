@@ -59,6 +59,7 @@ class AquariumViewModel(application: Application) : AndroidViewModel(application
      */
     private fun startSimulationPhysicsLoop() {
         viewModelScope.launch(Dispatchers.Default) {
+            var lastPersistAt = System.currentTimeMillis()
             while (isActive) {
                 delay(33) // ~30 fps physics update
                 val currentState = repository.gameState.value
@@ -130,11 +131,19 @@ class AquariumViewModel(application: Application) : AndroidViewModel(application
                 // Check water cleanliness decay
                 val newCleanliness = (currentState.tank.waterCleanliness - 0.00001f).coerceAtLeast(0.3f)
 
-                repository.updateState { state ->
+                // Keep the render state responsive without serializing the full save
+                // file on every 33 ms simulation tick.
+                repository.updateState(persist = false) { state ->
                     state.copy(
                         fishList = updatedFish,
                         tank = state.tank.copy(waterCleanliness = newCleanliness)
                     )
+                }
+
+                val now = System.currentTimeMillis()
+                if (now - lastPersistAt >= 5_000L) {
+                    repository.persistCurrentState()
+                    lastPersistAt = now
                 }
             }
         }
@@ -405,7 +414,8 @@ class AquariumViewModel(application: Application) : AndroidViewModel(application
     }
 
     override fun onCleared() {
-        super.onCleared()
+        repository.persistCurrentState()
         ambientSynthesizer.stopAmbientTrack()
+        super.onCleared()
     }
 }
