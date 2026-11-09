@@ -169,24 +169,42 @@ class AquariumViewModel(application: Application) : AndroidViewModel(application
 
     // --- User Actions ---
 
+    /**
+     * Feed the fish nearest to the normalized tap position. A tap far from every
+     * fish only drops food visually and does not grant progress or experience.
+     */
     fun feedFishAt(x: Float, y: Float) {
         repository.updateState { state ->
+            val targetFish = state.fishList.minByOrNull { fish ->
+                hypot(fish.posX - x, fish.posY - y)
+            } ?: return@updateState state
+
+            val distance = hypot(targetFish.posX - x, targetFish.posY - y)
+            if (distance > 0.22f) return@updateState state
+
             val updatedFish = state.fishList.map { fish ->
-                val fedHunger = (fish.hungerPercent + 0.25f).coerceAtMost(1.0f)
-                val happy = (fish.happinessPercent + 0.15f).coerceAtMost(1.0f)
-                fish.copy(hungerPercent = fedHunger, happinessPercent = happy)
+                if (fish.id == targetFish.id) {
+                    fish.copy(
+                        hungerPercent = (fish.hungerPercent + 0.25f).coerceAtMost(1.0f),
+                        happinessPercent = (fish.happinessPercent + 0.15f).coerceAtMost(1.0f)
+                    )
+                } else {
+                    fish
+                }
             }
-            // Advance feeding daily challenge
-            val updatedChallenges = state.dailyChallenges.map { ch ->
-                if (ch.id == "ch_1" && ch.currentCount < ch.targetCount) {
-                    ch.copy(currentCount = ch.currentCount + 1)
-                } else ch
+            val updatedChallenges = state.dailyChallenges.map { challenge ->
+                if (challenge.id == "ch_1" && challenge.currentCount < challenge.targetCount) {
+                    challenge.copy(currentCount = challenge.currentCount + 1)
+                } else {
+                    challenge
+                }
             }
+            val nextExp = state.playerExp + 5
             state.copy(
                 fishList = updatedFish,
                 dailyChallenges = updatedChallenges,
-                playerExp = (state.playerExp + 5).let { if (it >= state.maxExp) it - state.maxExp else it },
-                playerLevel = if (state.playerExp + 5 >= state.maxExp) state.playerLevel + 1 else state.playerLevel
+                playerExp = if (nextExp >= state.maxExp) nextExp - state.maxExp else nextExp,
+                playerLevel = if (nextExp >= state.maxExp) state.playerLevel + 1 else state.playerLevel
             )
         }
     }
