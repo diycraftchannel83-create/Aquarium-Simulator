@@ -268,14 +268,18 @@ class GameRepository(context: Context) {
         }
     }
 
+    /** Persist player actions immediately (backward-compatible call shape). */
+    fun updateState(transform: (GameState) -> GameState) {
+        updateState(transform, persist = true)
+    }
+
     /**
-     * Publishes a new game state. High-frequency simulation ticks should pass
-     * persist = false and call persistCurrentState() on a bounded interval.
-     * Player actions keep the default immediate persistence behavior.
+     * Publishes a new game state. High-frequency simulation ticks pass persist=false
+     * and call persistCurrentState() on a bounded interval.
      */
     fun updateState(
         transform: (GameState) -> GameState,
-        persist: Boolean = true
+        persist: Boolean
     ) {
         synchronized(this) {
             val newState = transform(_gameState.value)
