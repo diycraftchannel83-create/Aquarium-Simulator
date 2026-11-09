@@ -1,0 +1,37 @@
+{
+  "format": "glTF 2.0 GLB",
+  "extensions": [
+    "KHR_mesh_quantization"
+  ],
+  "coordinateSystem": {
+    "forward": "+X",
+    "up": "+Y",
+    "depth": "+Z"
+  },
+  "models": [
+    {
+      "id": "clownfish",
+      "path": "models/fish/clownfish.glb",
+      "staticMesh": true,
+      "embeddedAnimation": false
+    },
+    {
+      "id": "blue_tang",
+      "path": "models/fish/blue_tang.glb",
+      "staticMesh": true,
+      "embeddedAnimation": false
+    },
+    {
+      "id": "angelfish",
+      "path": "models/fish/angelfish.glb",
+      "staticMesh": true,
+      "embeddedAnimation": false
+    },
+    {
+      "id": "neon_tetra",
+      "path": "models/fish/neon_tetra.glb",
+      "staticMesh": true,
+      "embeddedAnimation": false
+    }
+  ]
+}
