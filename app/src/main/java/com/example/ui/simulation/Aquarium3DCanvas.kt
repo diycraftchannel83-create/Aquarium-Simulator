@@ -615,149 +615,220 @@ private fun DrawScope.drawRealisticFish3D(
     isNightMode: Boolean
 ) {
     val species = AquariumCatalog.getSpecies(fish.speciesId)
+    val depthScale = 0.72f + fish.posZ * 0.42f
+    val growth = (0.58f + fish.growthStage * 0.42f).coerceIn(0.58f, 1.08f)
+    val scale = species.bodyScale * depthScale * growth
+    val cx = fish.posX * width
+    val cy = fish.posY * height
+    val right = fish.velX >= 0f
+    val direction = if (right) 1f else -1f
+    val speed = hypot(fish.velX, fish.velY)
+    val swim = (1.8f + speed * 900f).coerceIn(1.8f, 5.5f)
+    val phase = time * swim * species.baseSwimSpeed + fish.posX * 13f + fish.posY * 4f
+    val tailSwing = sin(phase) * 0.22f
+    val finFlutter = sin(phase * 1.65f) * 0.12f
+    val heading = Math.toDegrees(atan2(fish.velY.toDouble(), abs(fish.velX).coerceAtLeast(0.0001f).toDouble())).toFloat()
+    val night = if (isNightMode) 0.76f else 1f
 
-    // Calculate 3D perspective scale & lighting attenuation based on depth (posZ: 0.1 to 0.9)
-    val depthScale = 0.65f + (fish.posZ * 0.55f)
-    val finalScale = species.bodyScale * depthScale * (0.5f + fish.growthStage * 0.5f)
+    // Species-specific silhouettes: the body proportions are deliberately different,
+    // rather than reusing one generic oval for every fish.
+    val isDiscus = fish.speciesId == "discus_royal"
+    val isAngel = fish.speciesId == "flame_angelfish" || fish.speciesId == "angelfish"
+    val isTetra = fish.speciesId == "neon_tetra"
+    val bodyLength = when {
+        isDiscus -> 62f
+        isAngel -> 48f
+        isTetra -> 66f
+        fish.speciesId == "blue_tang" -> 76f
+        fish.speciesId == "clownfish" -> 66f
+        else -> 68f
+    } * scale
+    val bodyHeight = when {
+        isDiscus -> 54f
+        isAngel -> 56f
+        isTetra -> 25f
+        fish.speciesId == "clownfish" -> 39f
+        else -> 35f
+    } * scale
+    val primary = Color(species.primaryColorHex).copy(
+        red = (Color(species.primaryColorHex).red * night).coerceIn(0f, 1f),
+        green = (Color(species.primaryColorHex).green * night).coerceIn(0f, 1f),
+        blue = (Color(species.primaryColorHex).blue * night).coerceIn(0f, 1f)
+    )
+    val accent = Color(species.secondaryColorHex)
+    val fin = Color(species.finColorHex)
+    val darkOutline = Color(0xFF102B3A).copy(alpha = 0.82f)
 
-    // Screen coordinates
-    val screenX = fish.posX * width
-    val screenY = fish.posY * height
+    rotate(degrees = if (right) heading else -heading, pivot = Offset(cx, cy)) {
+        val tailX = cx - direction * bodyLength * 0.48f
+        val tailWagY = tailSwing * bodyHeight
 
-    val movingRight = fish.velX >= 0
-    val speedMagnitude = hypot(fish.velX, fish.velY)
-    val swimSpeedMultiplier = (speedMagnitude * 1200f).coerceIn(1.5f, 5.0f)
-    val tailPhase = time * swimSpeedMultiplier * species.baseSwimSpeed + fish.posX * 15f
-    val tailWag = sin(tailPhase) * 18f
-
-    // Rotation angle based on velocity vector
-    val headingAngle = Math.toDegrees(atan2(fish.velY.toDouble(), abs(fish.velX).toDouble())).toFloat()
-
-    rotate(
-        degrees = if (movingRight) headingAngle else -headingAngle,
-        pivot = Offset(screenX, screenY)
-    ) {
-        val dir = if (movingRight) 1f else -1f
-
-        val primary = Color(species.primaryColorHex)
-        val secondary = Color(species.secondaryColorHex)
-        val finColor = Color(species.finColorHex)
-
-        // Depth dimming (fish farther in the background appear atmospherically bluer)
-        val zAtmosphere = (1f - fish.posZ) * 0.35f
-        val adjustedPrimary = primary.copy(
-            red = (primary.red * (1f - zAtmosphere)).coerceIn(0f, 1f),
-            blue = (primary.blue + zAtmosphere * 0.3f).coerceIn(0f, 1f)
-        )
-
-        // Glow effect for bioluminescent species
-        if (species.glowBioluminescent) {
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(primary.copy(alpha = 0.45f), Color.Transparent),
-                    center = Offset(screenX, screenY),
-                    radius = 70f * finalScale
-                ),
-                radius = 70f * finalScale,
-                center = Offset(screenX, screenY)
-            )
-        }
-
-        // 1. Caudal Fin (Tail) with realistic undulating wag
-        val tailOriginX = screenX - (36f * finalScale * dir)
-        val tailPath = Path().apply {
-            moveTo(tailOriginX, screenY)
-            lineTo(
-                tailOriginX - (35f * finalScale * dir),
-                screenY - 22f * finalScale + tailWag
-            )
-            quadraticTo(
-                tailOriginX - (25f * finalScale * dir),
-                screenY + tailWag * 0.5f,
-                tailOriginX - (35f * finalScale * dir),
-                screenY + 22f * finalScale + tailWag
-            )
-            close()
-        }
-        drawPath(path = tailPath, color = finColor)
-
-        // 2. Dorsal & Pelvic Fins
-        val dorsalPath = Path().apply {
-            moveTo(screenX - (12f * finalScale * dir), screenY - 18f * finalScale)
-            quadraticTo(
-                screenX + (2f * finalScale * dir),
-                screenY - 36f * finalScale,
-                screenX + (18f * finalScale * dir),
-                screenY - 14f * finalScale
-            )
-            close()
-        }
-        drawPath(path = dorsalPath, color = finColor.copy(alpha = 0.85f))
-
-        // 3. Fish Main Torso (Streamlined hydrodynamic 3D ellipse)
-        val bodyWidth = 68f * finalScale
-        val bodyHeight = 36f * finalScale
-
+        // Soft depth shadow gives the fish separation from the water.
         drawOval(
-            brush = Brush.linearGradient(
-                colors = listOf(adjustedPrimary, secondary, adjustedPrimary),
-                start = Offset(screenX - bodyWidth / 2, screenY - bodyHeight / 2),
-                end = Offset(screenX + bodyWidth / 2, screenY + bodyHeight / 2)
-            ),
-            topLeft = Offset(screenX - bodyWidth / 2, screenY - bodyHeight / 2),
-            size = Size(bodyWidth, bodyHeight)
+            color = Color(0xFF00121D).copy(alpha = 0.22f * night),
+            topLeft = Offset(cx - bodyLength * 0.54f, cy - bodyHeight * 0.36f + 5f * scale),
+            size = Size(bodyLength * 1.08f, bodyHeight * 0.82f)
         )
 
-        // 4. Characteristic Stripes / Patterns
-        if (species.id == "clownfish" || species.id == "lionfish") {
-            // Crisp white vertical stripes
-            for (offsetMultiplier in listOf(-0.1f, 0.2f)) {
-                val stripeX = screenX + (offsetMultiplier * bodyWidth * dir)
-                drawLine(
-                    color = secondary,
-                    start = Offset(stripeX, screenY - bodyHeight * 0.42f),
-                    end = Offset(stripeX, screenY + bodyHeight * 0.42f),
-                    strokeWidth = 6f * finalScale,
-                    cap = StrokeCap.Round
-                )
+        // Caudal peduncle and animated forked tail.
+        val tailPath = Path().apply {
+            moveTo(tailX, cy)
+            cubicTo(
+                tailX - direction * 12f * scale, cy - 8f * scale,
+                tailX - direction * 22f * scale, cy - bodyHeight * (0.72f + tailSwing * 0.18f),
+                tailX - direction * 39f * scale, cy - bodyHeight * (0.78f + tailSwing * 0.28f) + tailWagY
+            )
+            lineTo(tailX - direction * 30f * scale, cy + tailWagY * 0.35f)
+            lineTo(tailX - direction * 39f * scale, cy + bodyHeight * (0.78f - tailSwing * 0.28f) + tailWagY)
+            cubicTo(
+                tailX - direction * 20f * scale, cy + bodyHeight * 0.65f,
+                tailX - direction * 10f * scale, cy + 8f * scale,
+                tailX, cy
+            )
+            close()
+        }
+        drawPath(tailPath, Brush.linearGradient(listOf(fin.copy(alpha = 0.96f), primary, fin.copy(alpha = 0.82f)),
+            start = Offset(tailX - direction * 40f * scale, cy), end = Offset(tailX, cy)))
+        drawPath(tailPath, darkOutline.copy(alpha = 0.34f), style = androidx.compose.ui.graphics.drawscope.Stroke(1.1f * scale))
+
+        // Dorsal and anal fins, with swept-back profile and animated edge.
+        val dorsal = Path().apply {
+            moveTo(cx - bodyLength * 0.38f, cy - bodyHeight * 0.24f)
+            cubicTo(cx - bodyLength * 0.20f, cy - bodyHeight * 0.78f,
+                cx + bodyLength * 0.16f, cy - bodyHeight * (0.84f + finFlutter),
+                cx + bodyLength * 0.40f, cy - bodyHeight * 0.22f)
+            close()
+        }
+        drawPath(dorsal, Brush.verticalGradient(listOf(fin.copy(alpha = 0.98f), primary.copy(alpha = 0.76f)),
+            startY = cy - bodyHeight, endY = cy))
+        drawPath(dorsal, darkOutline.copy(alpha = 0.28f), style = androidx.compose.ui.graphics.drawscope.Stroke(0.9f * scale))
+
+        val anal = Path().apply {
+            moveTo(cx - bodyLength * 0.30f, cy + bodyHeight * 0.22f)
+            cubicTo(cx - bodyLength * 0.05f, cy + bodyHeight * 0.72f,
+                cx + bodyLength * 0.23f, cy + bodyHeight * (0.64f - finFlutter),
+                cx + bodyLength * 0.38f, cy + bodyHeight * 0.18f)
+            close()
+        }
+        drawPath(anal, fin.copy(alpha = 0.88f))
+
+        // Main body silhouette and layered light/shadow.
+        val body = Path().apply {
+            moveTo(cx + direction * bodyLength * 0.51f, cy - bodyHeight * 0.02f)
+            cubicTo(cx + direction * bodyLength * 0.34f, cy - bodyHeight * 0.58f,
+                cx - direction * bodyLength * 0.12f, cy - bodyHeight * 0.62f,
+                cx - direction * bodyLength * 0.43f, cy - bodyHeight * 0.22f)
+            cubicTo(cx - direction * bodyLength * 0.57f, cy - bodyHeight * 0.08f,
+                cx - direction * bodyLength * 0.57f, cy + bodyHeight * 0.08f,
+                cx - direction * bodyLength * 0.43f, cy + bodyHeight * 0.22f)
+            cubicTo(cx - direction * bodyLength * 0.12f, cy + bodyHeight * 0.62f,
+                cx + direction * bodyLength * 0.34f, cy + bodyHeight * 0.58f,
+                cx + direction * bodyLength * 0.51f, cy - bodyHeight * 0.02f)
+            close()
+        }
+        drawPath(body, Brush.linearGradient(
+            colors = listOf(Color.White.copy(alpha = 0.42f), primary, primary.copy(red = primary.red * 0.62f, green = primary.green * 0.68f, blue = primary.blue * 0.78f)),
+            start = Offset(cx, cy - bodyHeight * 0.72f), end = Offset(cx, cy + bodyHeight * 0.72f)
+        ))
+        drawPath(body, darkOutline.copy(alpha = 0.40f), style = androidx.compose.ui.graphics.drawscope.Stroke(1.1f * scale))
+
+        // Species markings.
+        when (fish.speciesId) {
+            "clownfish" -> {
+                // Three curved white bands with dark pinstripes, following the body volume.
+                for (fraction in listOf(-0.23f, 0.10f, 0.37f)) {
+                    val sx = cx + direction * bodyLength * fraction
+                    val band = Path().apply {
+                        moveTo(sx - 4f * scale, cy - bodyHeight * 0.46f)
+                        cubicTo(sx - 9f * scale, cy - bodyHeight * 0.12f, sx - 8f * scale, cy + bodyHeight * 0.18f, sx - 2f * scale, cy + bodyHeight * 0.45f)
+                        lineTo(sx + 5f * scale, cy + bodyHeight * 0.42f)
+                        cubicTo(sx - 1f * scale, cy + bodyHeight * 0.12f, sx + 1f * scale, cy - bodyHeight * 0.15f, sx + 5f * scale, cy - bodyHeight * 0.43f)
+                        close()
+                    }
+                    drawPath(band, Color(0xFF17232B).copy(alpha = 0.9f))
+                    drawPath(band, Color(0xFFF7F5E9))
+                }
+            }
+            "blue_tang" -> {
+                val marking = Path().apply {
+                    moveTo(cx + direction * bodyLength * 0.43f, cy - bodyHeight * 0.25f)
+                    cubicTo(cx + direction * bodyLength * 0.16f, cy - bodyHeight * 0.08f,
+                        cx + direction * bodyLength * 0.12f, cy + bodyHeight * 0.34f,
+                        cx - direction * bodyLength * 0.26f, cy + bodyHeight * 0.38f)
+                    cubicTo(cx - direction * bodyLength * 0.05f, cy + bodyHeight * 0.10f,
+                        cx - direction * bodyLength * 0.06f, cy - bodyHeight * 0.25f,
+                        cx + direction * bodyLength * 0.43f, cy - bodyHeight * 0.25f)
+                    close()
+                }
+                drawPath(marking, Color(0xFF071B38).copy(alpha = 0.92f))
+                drawOval(Color(0xFFFFD600), Offset(tailX - direction * 34f * scale, cy - 4f * scale), Size(9f * scale, 8f * scale))
+            }
+            "flame_angelfish", "angelfish" -> {
+                for (i in -2..2) {
+                    val sx = cx + direction * i * bodyLength * 0.12f
+                    drawPath(Path().apply {
+                        moveTo(sx - 3f * scale, cy - bodyHeight * 0.48f)
+                        quadraticTo(sx + 7f * scale, cy, sx - 2f * scale, cy + bodyHeight * 0.48f)
+                        lineTo(sx + 3f * scale, cy + bodyHeight * 0.46f)
+                        quadraticTo(sx + 12f * scale, cy, sx + 3f * scale, cy - bodyHeight * 0.46f)
+                        close()
+                    }, accent.copy(alpha = 0.8f))
+                }
+            }
+            "discus_royal" -> {
+                for (i in -3..3) {
+                    val sx = cx + i * bodyLength * 0.095f
+                    drawLine(Color(0xFFB2F5FF).copy(alpha = 0.28f), Offset(sx, cy - bodyHeight * 0.43f),
+                        Offset(sx, cy + bodyHeight * 0.43f), 1.2f * scale)
+                }
+            }
+            "neon_tetra" -> {
+                drawLine(Color(0xFF00E5FF), Offset(cx - direction * bodyLength * 0.30f, cy - 2f * scale),
+                    Offset(cx + direction * bodyLength * 0.28f, cy - 2f * scale), 3.2f * scale)
+                drawLine(Color(0xFFFF3D71), Offset(cx - direction * bodyLength * 0.34f, cy + 4f * scale),
+                    Offset(cx + direction * bodyLength * 0.18f, cy + 4f * scale), 2f * scale)
             }
         }
 
-        // 5. Expressive Fish Eye
-        val eyeX = screenX + (20f * finalScale * dir)
-        val eyeY = screenY - (6f * finalScale)
-        // White sclera
-        drawCircle(
-            color = Color.White,
-            radius = 5.5f * finalScale,
-            center = Offset(eyeX, eyeY)
-        )
-        // Pupil
-        drawCircle(
-            color = Color(0xFF0F172A),
-            radius = 3.2f * finalScale,
-            center = Offset(eyeX + (1.2f * finalScale * dir), eyeY)
-        )
-        // Specular eye catchlight
-        drawCircle(
-            color = Color.White,
-            radius = 1.2f * finalScale,
-            center = Offset(eyeX + (0.5f * finalScale * dir), eyeY - 1.2f * finalScale)
-        )
-
-        // 6. Pectoral Fin Flutter
-        val flutter = sin(tailPhase * 1.4f) * 12f
-        val pectoralPath = Path().apply {
-            moveTo(screenX + (2f * finalScale * dir), screenY + 2f * finalScale)
-            quadraticTo(
-                screenX - (12f * finalScale * dir),
-                screenY + 16f * finalScale + flutter,
-                screenX - (6f * finalScale * dir),
-                screenY + 4f * finalScale
-            )
+        // Pectoral fin translucent and visibly fluttering.
+        val pectoral = Path().apply {
+            moveTo(cx + direction * bodyLength * 0.03f, cy + bodyHeight * 0.02f)
+            cubicTo(cx - direction * bodyLength * 0.06f, cy + bodyHeight * (0.42f + finFlutter),
+                cx + direction * bodyLength * 0.18f, cy + bodyHeight * (0.50f + finFlutter),
+                cx + direction * bodyLength * 0.20f, cy + bodyHeight * 0.08f)
             close()
         }
-        drawPath(path = pectoralPath, color = finColor.copy(alpha = 0.75f))
+        drawPath(pectoral, fin.copy(alpha = 0.52f))
+        drawPath(pectoral, Color.White.copy(alpha = 0.24f), style = androidx.compose.ui.graphics.drawscope.Stroke(0.8f * scale))
+
+        // Gill plate and curved gill slit.
+        val gillX = cx + direction * bodyLength * 0.19f
+        drawPath(Path().apply {
+            moveTo(gillX, cy - bodyHeight * 0.30f)
+            quadraticTo(gillX + direction * 11f * scale, cy, gillX, cy + bodyHeight * 0.30f)
+        }, Color(0xFF143847).copy(alpha = 0.46f), style = androidx.compose.ui.graphics.drawscope.Stroke(1.25f * scale))
+
+        // Mouth and a dimensional eye with iris ring.
+        val mouthX = cx + direction * bodyLength * 0.48f
+        drawLine(darkOutline, Offset(mouthX - direction * 2f * scale, cy - 1.5f * scale),
+            Offset(mouthX + direction * 4f * scale, cy + 1f * scale), 1.3f * scale, cap = StrokeCap.Round)
+        val eyeX = cx + direction * bodyLength * 0.34f
+        val eyeY = cy - bodyHeight * 0.19f
+        drawCircle(Color(0xFF07141F), 5.4f * scale, Offset(eyeX, eyeY))
+        drawCircle(Color(0xFFF8FBFF), 4.35f * scale, Offset(eyeX, eyeY))
+        drawCircle(Color(0xFF101820), 2.65f * scale, Offset(eyeX + direction * 0.9f * scale, eyeY))
+        drawCircle(Color.White, 1.05f * scale, Offset(eyeX - direction * 1.0f * scale, eyeY - 1.3f * scale))
+
+        // Scattered subtle scale glints and a soft dorsal highlight.
+        for (i in -2..2) {
+            val sx = cx + i * bodyLength * 0.105f
+            drawLine(Color.White.copy(alpha = 0.12f), Offset(sx, cy - bodyHeight * 0.12f),
+                Offset(sx + 3f * scale, cy + bodyHeight * 0.06f), 0.8f * scale)
+        }
+        drawPath(Path().apply {
+            moveTo(cx - bodyLength * 0.22f, cy - bodyHeight * 0.34f)
+            quadraticTo(cx + bodyLength * 0.05f, cy - bodyHeight * 0.52f, cx + bodyLength * 0.34f, cy - bodyHeight * 0.30f)
+        }, Color.White.copy(alpha = 0.30f), style = androidx.compose.ui.graphics.drawscope.Stroke(2.2f * scale, cap = StrokeCap.Round))
     }
 }
 
